@@ -1,9 +1,10 @@
-package packets
+package connection
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hypot/client/packets"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +27,7 @@ type HostAddress struct {
 func (h *HostAddress) Encode() []byte {
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, h.Port)
-	writeVarInt(&buf, len(h.Host))
+	packets.WriteVarInt(&buf, len(h.Host))
 	buf.WriteString(h.Host)
 	return buf.Bytes()
 }
@@ -90,25 +91,25 @@ func (c *Connect) Encode() ([]byte, error) {
 	binary.Write(&fixed, binary.BigEndian, c.uuid[8:16])
 
 	usernameOffset := int32(variable.Len())
-	writeVarInt(&variable, len(c.username))
+	packets.WriteVarInt(&variable, len(c.username))
 	variable.WriteString(c.username)
 
 	identityTokenOffset := int32(-1)
 	if c.identityToken != nil {
 		identityTokenOffset = int32(variable.Len())
 		tokenBytes := []byte(*c.identityToken)
-		writeVarInt(&variable, len(tokenBytes))
+		packets.WriteVarInt(&variable, len(tokenBytes))
 		variable.Write(tokenBytes)
 	}
 
 	languageOffset := int32(variable.Len())
-	writeVarInt(&variable, len(c.language))
+	packets.WriteVarInt(&variable, len(c.language))
 	variable.WriteString(c.language)
 
 	referralDataOffset := int32(-1)
 	if c.referralData != nil {
 		referralDataOffset = int32(variable.Len())
-		writeVarInt(&variable, len(c.referralData))
+		packets.WriteVarInt(&variable, len(c.referralData))
 		variable.Write(c.referralData)
 	}
 
@@ -132,7 +133,7 @@ func (c *Connect) Encode() ([]byte, error) {
 
 	var frame bytes.Buffer
 	binary.Write(&frame, binary.LittleEndian, uint32(len(payload)))
-	binary.Write(&frame, binary.LittleEndian, uint32(ConnectPacketId))
+	binary.Write(&frame, binary.LittleEndian, uint32(packets.ConnectPacketId))
 	frame.Write(payload)
 
 	return frame.Bytes(), nil

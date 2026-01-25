@@ -1,8 +1,9 @@
-package packets
+package connection
 
 import (
 	"bytes"
 	"encoding/binary"
+	"hypot/client/packets"
 )
 
 type Disconnect struct{}
@@ -19,7 +20,7 @@ func (c *Disconnect) Encode() ([]byte, error) {
 	var frame bytes.Buffer
 
 	binary.Write(&frame, binary.LittleEndian, uint32(payload.Len()))
-	binary.Write(&frame, binary.LittleEndian, uint32(DisconnectPacketId))
+	binary.Write(&frame, binary.LittleEndian, uint32(packets.DisconnectPacketId))
 	frame.Write(payload.Bytes())
 
 	return frame.Bytes(), nil

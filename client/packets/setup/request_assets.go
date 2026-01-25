@@ -1,9 +1,10 @@
-package packets
+package setup
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hypot/client/packets"
 )
 
 const (
@@ -32,7 +33,7 @@ func (c *RequestAssets) Encode() ([]byte, error) {
 
 	payload := append(fixed.Bytes(), variable.Bytes()...)
 
-	compressed := zstdEnc.EncodeAll(payload, nil)
+	compressed := packets.CompressZstd(payload)
 	if len(compressed) == 0 {
 		return nil, fmt.Errorf("zstd produced empty payload")
 	}

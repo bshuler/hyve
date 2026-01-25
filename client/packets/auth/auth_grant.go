@@ -1,8 +1,9 @@
-package packets
+package auth
 
 import (
 	"encoding/binary"
 	"errors"
+	"hypot/client/packets"
 )
 
 type AuthGrant struct {
@@ -20,7 +21,7 @@ func DecodeAuthGrant(data []byte) (*AuthGrant, error) {
 	out := &AuthGrant{}
 
 	if (nullBits&0x01) != 0 && authOff != -1 {
-		s, _, ok := readVarString(data, base+authOff)
+		s, _, ok := packets.ReadVarString(data, base+authOff)
 		if !ok {
 			return nil, errors.New("invalid auth grant")
 		}
@@ -28,7 +29,7 @@ func DecodeAuthGrant(data []byte) (*AuthGrant, error) {
 	}
 
 	if (nullBits&0x02) != 0 && srvOff != -1 {
-		s, _, ok := readVarString(data, base+srvOff)
+		s, _, ok := packets.ReadVarString(data, base+srvOff)
 		if !ok {
 			return nil, errors.New("invalid server identity")
 		}

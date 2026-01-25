@@ -1,9 +1,10 @@
-package packets
+package connection
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hypot/client/packets"
 )
 
 type Pong struct {
@@ -34,7 +35,7 @@ func (p *Pong) Encode() ([]byte, error) {
 	if err := binary.Write(&frame, binary.LittleEndian, uint32(payload.Len())); err != nil {
 		return nil, err
 	}
-	if err := binary.Write(&frame, binary.LittleEndian, uint32(PongPacketId)); err != nil {
+	if err := binary.Write(&frame, binary.LittleEndian, uint32(packets.PongPacketId)); err != nil {
 		return nil, err
 	}
 	if _, err := frame.Write(payload.Bytes()); err != nil {

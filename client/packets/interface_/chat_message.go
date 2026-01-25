@@ -1,8 +1,9 @@
-package packets
+package interface_
 
 import (
 	"bytes"
 	"encoding/binary"
+	"hypot/client/packets"
 )
 
 const ChatMessagePacketId = 211
@@ -21,7 +22,7 @@ func (c *ChatMessage) Encode() ([]byte, error) {
 	var payload bytes.Buffer
 	payload.WriteByte(0x01) // msg exists
 
-	writeVarInt(&payload, len(msgBytes))
+	packets.WriteVarInt(&payload, len(msgBytes))
 	if _, err := payload.Write(msgBytes); err != nil {
 		return nil, err
 	}

@@ -1,8 +1,9 @@
-package packets
+package interface_
 
 import (
 	"encoding/binary"
 	"errors"
+	"hypot/client/packets"
 
 	"github.com/google/uuid"
 )
@@ -33,7 +34,7 @@ func DecodeAddToServerPlayerList(data []byte) (*AddToServerPlayerList, error) {
 		return out, nil
 	}
 
-	playerCount, newoff, ok := readVarInt(data, off)
+	playerCount, newoff, ok := packets.ReadVarInt(data, off)
 	if !ok || playerCount < 0 {
 		return nil, errors.New("packets were decoding: invalid packet count")
 	}
@@ -49,13 +50,13 @@ func DecodeAddToServerPlayerList(data []byte) (*AddToServerPlayerList, error) {
 		pn := data[off] // null bits
 		off++
 
-		id, newoff, ok := readUUID16(data, off)
+		id, newoff, ok := packets.ReadUUID16(data, off)
 		if !ok {
 			return nil, errors.New("packets were decoding: invalid packet uuid")
 		}
 		off = newoff
 
-		wr, newoff, ok := readUUID16(data, off) // world
+		wr, newoff, ok := packets.ReadUUID16(data, off) // world
 		if !ok {
 			return nil, errors.New("packets were decoding: invalid packet uuid")
 		}
@@ -75,7 +76,7 @@ func DecodeAddToServerPlayerList(data []byte) (*AddToServerPlayerList, error) {
 		}
 
 		if (pn & 0x01) != 0 {
-			u, newoff, ok := readVarString(data, off)
+			u, newoff, ok := packets.ReadVarString(data, off)
 			if !ok {
 				return nil, errors.New("packets were decoding: invalid packet uuid")
 			}

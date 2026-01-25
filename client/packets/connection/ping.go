@@ -1,4 +1,4 @@
-package packets
+package connection
 
 import (
 	"encoding/binary"

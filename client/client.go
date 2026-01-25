@@ -14,6 +14,11 @@ import (
 	"fmt"
 	"hypot/auth"
 	"hypot/client/packets"
+	auth2 "hypot/client/packets/auth"
+	"hypot/client/packets/connection"
+	"hypot/client/packets/interface_"
+	"hypot/client/packets/player"
+	"hypot/client/packets/setup"
 	"math/big"
 	"strings"
 	"time"
@@ -106,7 +111,7 @@ func (c *HytaleClient) Connect() error {
 }
 
 func (c *HytaleClient) Disconnect() error {
-	p := packets.NewDisconnectPacket()
+	p := connection.NewDisconnectPacket()
 	pb, err := p.Encode()
 	if err != nil {
 		return err
@@ -167,7 +172,7 @@ func (c *HytaleClient) generateClientCert() (tls2.Certificate, string, error) {
 func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 	switch packetId {
 	case packets.AuthGrantPacketId:
-		packet, err := packets.DecodeAuthGrant(payload)
+		packet, err := auth2.DecodeAuthGrant(payload)
 		if err != nil {
 			return err
 		}
@@ -198,7 +203,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 			c.sentClientReady = true
 		}
 	case packets.AddToServerPlaylistPacketId:
-		p, err := packets.DecodeAddToServerPlayerList(payload)
+		p, err := interface_.DecodeAddToServerPlayerList(payload)
 		if err != nil {
 			return err
 		}
@@ -212,12 +217,12 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 	case packets.SetClientIdPacketId:
 		// On Set client id ready
 	case packets.PingPacketId:
-		p, err := packets.DecodePing(payload)
+		p, err := connection.DecodePing(payload)
 		if err != nil {
 			return err
 		}
 
-		pr := packets.NewPongPacket(p.Id)
+		pr := connection.NewPongPacket(p.Id)
 		prb, err := pr.Encode()
 		if err != nil {
 			return err
@@ -228,7 +233,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 			return err
 		}
 	case packets.ServerMessagePacketId:
-		p, ok, err := packets.DecodeServerMessage(payload)
+		p, ok, err := interface_.DecodeServerMessage(payload)
 		if err != nil {
 			return err
 		}
@@ -238,7 +243,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 
 		fmt.Println("Received message: ", p.Username, " - ", p.Message)
 		if p.Message == "leave" {
-			pl := packets.NewChatMessagePacket("ok fine")
+			pl := interface_.NewChatMessagePacket("ok fine")
 			plb, err := pl.Encode()
 			if err != nil {
 				return err
@@ -249,7 +254,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 				return err
 			}
 		} else if strings.HasPrefix("say", p.Message) {
-			pl := packets.NewChatMessagePacket(strings.TrimPrefix(p.Message, "say"))
+			pl := interface_.NewChatMessagePacket(strings.TrimPrefix(p.Message, "say"))
 			plb, err := pl.Encode()
 			if err != nil {
 				return err
@@ -267,7 +272,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 }
 
 func (c *HytaleClient) processJoinWorldPacket() error {
-	cr := packets.NewClientReadyPacket(true, false)
+	cr := player.NewClientReadyPacket(true, false)
 	b, err := cr.Encode()
 	if err != nil {
 		return err
@@ -277,7 +282,7 @@ func (c *HytaleClient) processJoinWorldPacket() error {
 		return err
 	}
 
-	cr = packets.NewClientReadyPacket(false, true)
+	cr = player.NewClientReadyPacket(false, true)
 	b, err = cr.Encode()
 	if err != nil {
 		return err
@@ -290,7 +295,7 @@ func (c *HytaleClient) processJoinWorldPacket() error {
 }
 
 func (c *HytaleClient) processWorldLoadProgressPacket() error {
-	po := packets.NewPlayerOptionsPacket()
+	po := setup.NewPlayerOptionsPacket()
 	b, err := po.Encode()
 	if err != nil {
 		return err
@@ -303,7 +308,7 @@ func (c *HytaleClient) processWorldLoadProgressPacket() error {
 }
 
 func (c *HytaleClient) processServerInfoPacket() error {
-	p := packets.NewRequestAssetsPacket()
+	p := setup.NewRequestAssetsPacket()
 	b, err := p.Encode()
 	if err != nil {
 		return err
@@ -315,7 +320,7 @@ func (c *HytaleClient) processServerInfoPacket() error {
 	return nil
 }
 
-func (c *HytaleClient) processAuthGrantPacket(packet *packets.AuthGrant) error {
+func (c *HytaleClient) processAuthGrantPacket(packet *auth2.AuthGrant) error {
 	at, err := c.sc.ExchangeAuthToken(c.fingerprint, *packet.AuthorizationGrant, c.Session.SessionToken)
 	if err != nil {
 		return err
@@ -329,7 +334,7 @@ func (c *HytaleClient) processAuthGrantPacket(packet *packets.AuthGrant) error {
 	fmt.Println("[at] ", at)
 	fmt.Println("[gt] ", gt)
 
-	atp := packets.NewAuthTokenPacket(at, gt)
+	atp := auth2.NewAuthTokenPacket(at, gt)
 	d, err := atp.Encode()
 	if err != nil {
 		return err
@@ -350,7 +355,7 @@ func (c *HytaleClient) joinServer() error {
 
 	c.stream = stream
 
-	p := packets.NewConnectPacket(c.Id, c.Username, &c.Session.IdentityToken, "en", nil, nil)
+	p := connection.NewConnectPacket(c.Id, c.Username, &c.Session.IdentityToken, "en", nil, nil)
 	data, err := p.Encode()
 	if err != nil {
 		panic(err)

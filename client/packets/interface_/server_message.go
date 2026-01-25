@@ -1,9 +1,10 @@
-package packets
+package interface_
 
 import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hypot/client/packets"
 )
 
 const (
@@ -44,7 +45,7 @@ func DecodeServerMessage(payload []byte) (msg *ServerMessage, ok bool, err error
 	if (fNull & 0x01) != 0 {
 		rawOff := int(int32(binary.LittleEndian.Uint32(payload[off+6 : off+10])))
 		p := varBase + rawOff
-		s, _, ok := readVarString(payload, p)
+		s, _, ok := packets.ReadVarString(payload, p)
 		if ok && s != "" {
 			out.Message = s
 			return out, true, nil
@@ -56,7 +57,7 @@ func DecodeServerMessage(payload []byte) (msg *ServerMessage, ok bool, err error
 	if (fNull & 0x02) != 0 {
 		msgOff := int(int32(binary.LittleEndian.Uint32(payload[off+10 : off+14])))
 		p := varBase + msgOff
-		s, _, ok := readVarString(payload, p)
+		s, _, ok := packets.ReadVarString(payload, p)
 		if !ok {
 			return nil, false, fmt.Errorf("FormattedMessage: bad messageId")
 		}
@@ -77,7 +78,7 @@ func DecodeServerMessage(payload []byte) (msg *ServerMessage, ok bool, err error
 		return nil, false, errors.New("FormattedMessage: bad params offset")
 	}
 
-	dictLen, pos2, ok := readVarInt(payload, pos)
+	dictLen, pos2, ok := packets.ReadVarInt(payload, pos)
 	if !ok || dictLen < 0 {
 		return nil, false, errors.New("FormattedMessage: bad params count")
 	}
@@ -86,13 +87,13 @@ func DecodeServerMessage(payload []byte) (msg *ServerMessage, ok bool, err error
 	var gotUser, gotMsg bool
 
 	for i := 0; i < dictLen; i++ {
-		key, pos2, ok := readVarString(payload, pos)
+		key, pos2, ok := packets.ReadVarString(payload, pos)
 		if !ok {
 			return nil, false, errors.New("FormattedMessage: bad params key")
 		}
 		pos = pos2
 
-		typeID, pos2, ok := readVarInt(payload, pos)
+		typeID, pos2, ok := packets.ReadVarInt(payload, pos)
 		if !ok || typeID < 0 {
 			return nil, false, errors.New("FormattedMessage: bad ParamValue typeId")
 		}
@@ -108,7 +109,7 @@ func DecodeServerMessage(payload []byte) (msg *ServerMessage, ok bool, err error
 
 			val := ""
 			if (nb & 0x01) != 0 {
-				val, pos2, ok = readVarString(payload, pos)
+				val, pos2, ok = packets.ReadVarString(payload, pos)
 				if !ok {
 					return nil, false, errors.New("StringParamValue: bad value")
 				}

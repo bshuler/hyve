@@ -1,9 +1,10 @@
-package packets
+package auth
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hypot/client/packets"
 )
 
 const (
@@ -32,11 +33,11 @@ func (c *AuthToken) Encode() ([]byte, error) {
 	var fixed bytes.Buffer
 
 	accessTokenOffset := uint32(variable.Len())
-	writeVarInt(&variable, len(c.AccessToken))
+	packets.WriteVarInt(&variable, len(c.AccessToken))
 	variable.WriteString(c.AccessToken)
 
 	serverAuthorizationGrantOffset := uint32(variable.Len())
-	writeVarInt(&variable, len(c.ServerAuthorizationGrant))
+	packets.WriteVarInt(&variable, len(c.ServerAuthorizationGrant))
 	variable.WriteString(c.ServerAuthorizationGrant)
 
 	fixed.WriteByte(0b0011)
