@@ -15,7 +15,7 @@ import (
 	"hypot/auth"
 	"hypot/client/packets"
 	"math/big"
-	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,15 +78,7 @@ func (c *HytaleClient) Connect() error {
 		Certificates: []tls2.Certificate{
 			clientCert,
 		},
-		NextProtos: []string{"hytale/1"},
-	}
-
-	connt, err := net.DialTimeout("udp", "99.178.170.123:5520", 5*time.Second)
-	if err != nil {
-		fmt.Println("UDP dial failed:", err)
-	} else {
-		fmt.Println("UDP dial succeeded")
-		connt.Close()
+		NextProtos: []string{"hytale/1", "hytale/2"},
 	}
 
 	qconf := &quic.Config{
@@ -256,6 +248,14 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 			if err := c.Disconnect(); err != nil {
 				return err
 			}
+		} else if strings.HasPrefix("say", p.Message) {
+			pl := packets.NewChatMessagePacket(strings.TrimPrefix(p.Message, "say"))
+			plb, err := pl.Encode()
+			if err != nil {
+				return err
+			}
+
+			c.stream.Write(plb)
 		}
 
 	default:
@@ -350,11 +350,13 @@ func (c *HytaleClient) joinServer() error {
 
 	c.stream = stream
 
-	p := packets.NewConnectPacket(c.Id, c.Session.IdentityToken, c.Username)
+	p := packets.NewConnectPacket(c.Id, c.Username, &c.Session.IdentityToken, "en", nil, nil)
 	data, err := p.Encode()
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Printf("%x\n", data)
 
 	fmt.Printf("Sending Connect packet (%d bytes)\n", len(data))
 	fmt.Printf("Identity token length: %d\n", len(c.Session.IdentityToken))
