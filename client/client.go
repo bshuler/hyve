@@ -106,11 +106,17 @@ func (c *HytaleClient) Connect(ctx context.Context) error {
 		// Read loop failed before handshake completed. Push the error
 		// back so Run() can still observe it, then return it.
 		c.runErr <- err
+		if c.conn != nil {
+			_ = c.conn.CloseWithError(0, "handshake failed")
+		}
 		return err
 	case <-ctx.Done():
 		// Handshake timed out / caller cancelled. Tear down the loop
 		// so it doesn't leak.
 		c.cancel()
+		if c.conn != nil {
+			_ = c.conn.CloseWithError(0, "handshake cancelled")
+		}
 		return ctx.Err()
 	}
 }
