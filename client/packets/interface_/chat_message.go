@@ -3,7 +3,7 @@ package interface_
 import (
 	"bytes"
 	"encoding/binary"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 )
 
 const ChatMessagePacketId = 211

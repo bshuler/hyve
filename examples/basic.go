@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"hypot/auth"
-	"hypot/client"
+	"github.com/bshuler/hyve/auth"
+	"github.com/bshuler/hyve/client"
 )
 
 func main() {

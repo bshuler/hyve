@@ -3,7 +3,7 @@ package auth
 import (
 	"encoding/binary"
 	"errors"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 )
 
 type AuthGrant struct {

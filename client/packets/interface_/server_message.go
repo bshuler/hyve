@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 )
 
 const (

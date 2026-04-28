@@ -3,7 +3,7 @@ package connection
 import (
 	"bytes"
 	"encoding/binary"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 )
 
 type Disconnect struct{}

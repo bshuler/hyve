@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 )
 
 type Pong struct {

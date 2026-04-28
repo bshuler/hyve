@@ -3,7 +3,7 @@ package interface_
 import (
 	"encoding/binary"
 	"errors"
-	"hypot/client/packets"
+	"github.com/bshuler/hyve/client/packets"
 
 	"github.com/google/uuid"
 )
