@@ -21,6 +21,7 @@ import (
 	"github.com/bshuler/hyve/client/packets/setup"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,21 @@ type HytaleClient struct {
 	sentPlayerOptions bool
 	sentClientReady   bool
 
+	// handshakeDone is closed (exactly once) after the auth + join-world
+	// handshake completes. Connect blocks on this so callers learn about
+	// dial/auth failures synchronously.
+	handshakeDone chan struct{}
+	handshakeOnce sync.Once
+
+	// runErr is buffered (1) and receives the read loop's terminal error
+	// when it exits. Run() blocks on it; Connect() select-reads it so an
+	// early read-loop failure aborts the handshake wait.
+	runErr chan error
+
+	// ctx/cancel control the lifetime of the read loop. Disconnect()
+	// cancels them so the loop exits on the next iteration. They are
+	// distinct from the context passed to Connect() (which only governs
+	// the handshake-wait timeout).
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -59,8 +75,66 @@ func NewHytaleClient(ip string, port int, profile *auth.Profile, password *strin
 	}
 }
 
-func (c *HytaleClient) Connect() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// Connect establishes the QUIC connection, opens the game stream, sends
+// the Connect packet, then spawns the read loop on a goroutine and waits
+// for either:
+//   - the handshake to complete (returns nil),
+//   - the read loop to fail (returns its error),
+//   - the supplied ctx to be cancelled or hit its deadline.
+//
+// The supplied ctx governs only the handshake-wait window; the read
+// loop's own lifetime is controlled by an internal context cancelled by
+// Disconnect.
+func (c *HytaleClient) Connect(ctx context.Context) error {
+	c.handshakeDone = make(chan struct{})
+	c.runErr = make(chan error, 1)
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+
+	if err := c.dialAndOpenStream(ctx); err != nil {
+		c.cancel()
+		return err
+	}
+
+	go func() {
+		c.runErr <- c.readLoop()
+	}()
+
+	select {
+	case <-c.handshakeDone:
+		return nil
+	case err := <-c.runErr:
+		// Read loop failed before handshake completed. Push the error
+		// back so Run() can still observe it, then return it.
+		c.runErr <- err
+		return err
+	case <-ctx.Done():
+		// Handshake timed out / caller cancelled. Tear down the loop
+		// so it doesn't leak.
+		c.cancel()
+		return ctx.Err()
+	}
+}
+
+// Run blocks until the read-loop goroutine exits, returning whatever
+// error it produced (nil on a clean disconnect). It is safe to call
+// Run after Connect returns nil; calling Run before Connect or after
+// Disconnect will block forever / return immediately depending on
+// internal state, so callers should only invoke it once per Connect.
+func (c *HytaleClient) Run(ctx context.Context) error {
+	select {
+	case err := <-c.runErr:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// dialAndOpenStream performs the synchronous part of bringing up a
+// connection: session creation, QUIC dial, stream open, and sending the
+// initial Connect packet. After this returns nil, the server should
+// respond with AuthGrant and the read loop can take over.
+func (c *HytaleClient) dialAndOpenStream(ctx context.Context) error {
+	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	s, err := c.sc.NewGameSession(c.Id)
@@ -92,7 +166,7 @@ func (c *HytaleClient) Connect() error {
 	}
 
 	fmt.Println("Starting QUIC dial...")
-	conn, err := quic.DialAddr(ctx, dst, tls, qconf)
+	conn, err := quic.DialAddr(dialCtx, dst, tls, qconf)
 	if err != nil {
 		return fmt.Errorf("QUIC dial failed: %w", err)
 	}
@@ -100,11 +174,23 @@ func (c *HytaleClient) Connect() error {
 
 	c.conn = conn
 
-	c.ctx, c.cancel = context.WithCancel(context.Background())
-
-	err = c.joinServer()
+	stream, err := c.conn.OpenStreamSync(dialCtx)
 	if err != nil {
-		return err
+		return fmt.Errorf("open stream: %w", err)
+	}
+	c.stream = stream
+
+	p := connection.NewConnectPacket(c.Id, c.Username, &c.Session.IdentityToken, "en", nil, nil)
+	data, err := p.Encode()
+	if err != nil {
+		return fmt.Errorf("encode connect packet: %w", err)
+	}
+
+	fmt.Printf("Sending Connect packet (%d bytes)\n", len(data))
+	fmt.Printf("Identity token length: %d\n", len(c.Session.IdentityToken))
+
+	if _, err := c.stream.Write(data); err != nil {
+		return fmt.Errorf("write connect packet: %w", err)
 	}
 
 	return nil
@@ -117,16 +203,19 @@ func (c *HytaleClient) Disconnect() error {
 		return err
 	}
 
-	if _, err := c.stream.Write(pb); err != nil {
-		return err
+	if c.stream != nil {
+		if _, err := c.stream.Write(pb); err != nil {
+			// Continue with teardown even if the disconnect packet
+			// failed to send — the server side will GC us anyway.
+		}
 	}
 
 	if c.cancel != nil {
 		c.cancel()
 	}
 
-	if err := c.stream.Close(); err != nil {
-		return err
+	if c.stream != nil {
+		_ = c.stream.Close()
 	}
 	if c.conn != nil {
 		return c.conn.CloseWithError(0, "client disconnect")
@@ -201,6 +290,7 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 				return err
 			}
 			c.sentClientReady = true
+			c.signalHandshakeDone()
 		}
 	case packets.AddToServerPlaylistPacketId:
 		p, err := interface_.DecodeAddToServerPlayerList(payload)
@@ -269,6 +359,16 @@ func (c *HytaleClient) processPacket(packetId int, payload []byte) error {
 	}
 
 	return nil
+}
+
+// signalHandshakeDone closes the handshakeDone channel exactly once.
+// Exposed as a method (not inlined) so unit tests can drive it directly.
+func (c *HytaleClient) signalHandshakeDone() {
+	c.handshakeOnce.Do(func() {
+		if c.handshakeDone != nil {
+			close(c.handshakeDone)
+		}
+	})
 }
 
 func (c *HytaleClient) processJoinWorldPacket() error {
@@ -346,29 +446,16 @@ func (c *HytaleClient) processAuthGrantPacket(packet *auth2.AuthGrant) error {
 	return nil
 }
 
-func (c *HytaleClient) joinServer() error {
-	stream, err := c.conn.OpenStreamSync(context.Background())
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	c.stream = stream
-
-	p := connection.NewConnectPacket(c.Id, c.Username, &c.Session.IdentityToken, "en", nil, nil)
-	data, err := p.Encode()
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("%x\n", data)
-
-	fmt.Printf("Sending Connect packet (%d bytes)\n", len(data))
-	fmt.Printf("Identity token length: %d\n", len(c.Session.IdentityToken))
-
-	if _, err := c.stream.Write(data); err != nil {
-		return err
-	}
+// readLoop runs the in-stream packet read loop until the lifetime
+// context is cancelled or the stream errors. It owns the stream's
+// Close() — Disconnect() cancels the context, which exits the loop,
+// which closes the stream on its way out.
+func (c *HytaleClient) readLoop() error {
+	defer func() {
+		if c.stream != nil {
+			_ = c.stream.Close()
+		}
+	}()
 
 	var acc []byte
 	tmp := make([]byte, 64*1024)
@@ -384,7 +471,7 @@ func (c *HytaleClient) joinServer() error {
 			return err
 		}
 
-		n, err := stream.Read(tmp)
+		n, err := c.stream.Read(tmp)
 		if err != nil {
 			if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
 				continue
@@ -414,10 +501,5 @@ func (c *HytaleClient) joinServer() error {
 				acc = acc[frameLen:]
 			}
 		}
-		if err != nil {
-			return err
-		}
 	}
-
-	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/bshuler/hyve/auth"
 	"github.com/bshuler/hyve/client"
@@ -49,8 +50,12 @@ func main() {
 	profile := p[profileNum]
 
 	hc := client.NewHytaleClient("127.0.0.1", 5520, profile, nil, c)
-	err = hc.Connect()
+	ctx := context.Background()
+	err = hc.Connect(ctx)
 	if err != nil {
 		panic(err)
+	}
+	if err := hc.Run(ctx); err != nil {
+		fmt.Println("run:", err)
 	}
 }
